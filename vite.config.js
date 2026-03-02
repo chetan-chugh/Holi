@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  base: '/Holi/',
   server: {
     host: true, // allow external access
     allowedHosts: [

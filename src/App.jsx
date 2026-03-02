@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 const HOLI_COLORS = [
   "#FF3CAC", "#F7971E", "#FFD700", "#00C9FF", "#39FF14",
@@ -14,7 +14,6 @@ function randomBetween(a, b) {
   return a + Math.random() * (b - a);
 }
 
-// Generate SVG path for a water balloon splat shape
 function generateSplatPath(numPoints = 16, baseRadius = 70) {
   const points = [];
   for (let i = 0; i < numPoints; i++) {
@@ -25,7 +24,6 @@ function generateSplatPath(numPoints = 16, baseRadius = 70) {
       : baseRadius * randomBetween(0.45, 0.8);
     points.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
   }
-
   let d = "";
   for (let i = 0; i < points.length; i++) {
     const curr = points[i];
@@ -40,46 +38,30 @@ function generateSplatPath(numPoints = 16, baseRadius = 70) {
   return d;
 }
 
-// Generate triangular spike shapes
-// function generateTriangleSpikes(count, baseRadius) {
-//   const triangles = [];
-//   for (let i = 0; i < count; i++) {
-//     const angle = (i / count) * Math.PI * 2 + randomBetween(-0.2, 0.2);
-//     const length = randomBetween(40, 80);
-//     const width = randomBetween(15, 30);
-//     const dist = baseRadius * randomBetween(0.6, 0.9);
-//     triangles.push({ angle, length, width, dist });
-//   }
-//   return triangles;
-// }
+// Water Balloon component that flies up and then splats
+function WaterBalloon({ id, startX, targetX, targetY, color, onSplat }) {
+  const [phase, setPhase] = useState("flying"); // "flying" | "splat"
+  const [splatVisible, setSplatVisible] = useState(false);
 
-// Generate a teardrop drip
-// function generateDrip(sx, sy, len, w) {
-//   const ex = sx + randomBetween(-w * 0.4, w * 0.4);
-//   const ey = sy + len;
-//   return `M ${sx - w / 2} ${sy}
-//     C ${sx - w / 2} ${sy + len * 0.4}, ${ex - w * 0.15} ${ey - 4}, ${ex} ${ey + w * 0.5}
-//     C ${ex + w * 0.15} ${ey - 4}, ${sx + w / 2} ${sy + len * 0.4}, ${sx + w / 2} ${sy} Z`;
-// }
+  // Duration of flight
+  const flightDuration = useRef(randomBetween(900, 1500)).current;
+  const balloonSize = useRef(randomBetween(12, 20)).current;
 
-function BalloonSplat({ x, y, id, onDone }) {
-  const [isVisible, setIsVisible] = useState(false);
-  const color = useRef(randomColor()).current;
+  useEffect(() => {
+    // After flight duration, trigger splat
+    const t = setTimeout(() => {
+      setPhase("splat");
+      requestAnimationFrame(() => setSplatVisible(true));
+      // Remove after fade
+      setTimeout(() => onSplat(id), 9000);
+    }, flightDuration);
+    return () => clearTimeout(t);
+  }, [flightDuration, id, onSplat]);
+
   const darkerColor = useRef(randomColor()).current;
-  const baseRadius = useRef(randomBetween(50, 80)).current;
-  const splatPath = useRef(generateSplatPath(18, baseRadius)).current;
   const scale = useRef(randomBetween(0.85, 1.4)).current;
-
-  // const triangles = useRef(generateTriangleSpikes(8, baseRadius)).current;
-
-  const drips = useRef(
-    Array.from({ length: Math.floor(randomBetween(6, 11)) }, () => ({
-      sx: randomBetween(-60, 60),
-      sy: randomBetween(20, 70),
-      len: randomBetween(25, 70),
-      w: randomBetween(5, 14),
-    }))
-  ).current;
+  const splatPath = useRef(generateSplatPath(18, randomBetween(50, 80))).current;
+  const baseRadius = randomBetween(50, 80);
 
   const droplets = useRef(
     Array.from({ length: Math.floor(randomBetween(8, 16)) }, () => ({
@@ -89,30 +71,37 @@ function BalloonSplat({ x, y, id, onDone }) {
     }))
   ).current;
 
-  // const streaks = useRef(
-  //   Array.from({ length: Math.floor(randomBetween(4, 8)) }, () => ({
-  //     angle: randomBetween(0, Math.PI * 2),
-  //     dist: randomBetween(50, 110),
-  //     len: randomBetween(15, 40),
-  //     w: randomBetween(2, 5),
-  //   }))
-  // ).current;
+  const uid = `b${id}`;
 
-  useEffect(() => {
-    // Trigger animation after mount
-    requestAnimationFrame(() => setIsVisible(true));
-    const t = setTimeout(() => onDone(id), 9000);
-    return () => clearTimeout(t);
-  }, [id, onDone]);
+  if (phase === "flying") {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          left: startX,
+          bottom: -60,
+          pointerEvents: "none",
+          zIndex: 50,
+          transform: "translateX(-50%)",
+          animation: `balloonFly ${flightDuration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`,
+          "--target-x": `${targetX - startX}px`,
+          "--target-y": `calc(-100vh + ${targetY}px + 60px)`,
+        }}
+      >
+        <svg width={16} height={16} viewBox="0 0 16 16">
+          <circle cx="8" cy="8" r="7" fill={color} />
+        </svg>
+      </div>
+    );
+  }
 
-  const uid = `s${id}`;
-
+  // Splat phase
   return (
     <div
       style={{
         position: "fixed",
-        left: x,
-        top: y,
+        left: targetX,
+        top: targetY,
         pointerEvents: "none",
         zIndex: 50,
         transform: "translate(-50%, -50%)",
@@ -135,58 +124,6 @@ function BalloonSplat({ x, y, id, onDone }) {
           </filter>
         </defs>
 
-        {/* Triangle spikes flying outward */}
-        {/* {triangles.map((t, i) => {
-          const cx = Math.cos(t.angle) * t.dist * scale;
-          const cy = Math.sin(t.angle) * t.dist * scale;
-          const tipX = Math.cos(t.angle) * (t.dist + t.length) * scale;
-          const tipY = Math.sin(t.angle) * (t.dist + t.length) * scale;
-          const perpAngle = t.angle + Math.PI / 2;
-          const baseX1 = cx + Math.cos(perpAngle) * t.width / 2 * scale;
-          const baseY1 = cy + Math.sin(perpAngle) * t.width / 2 * scale;
-          const baseX2 = cx - Math.cos(perpAngle) * t.width / 2 * scale;
-          const baseY2 = cy - Math.sin(perpAngle) * t.width / 2 * scale;
-          
-          return (
-            <polygon
-              key={`tri-${i}`}
-              points={`${tipX},${tipY} ${baseX1},${baseY1} ${baseX2},${baseY2}`}
-              fill={color}
-              opacity={isVisible ? 0.85 : 0}
-              style={{
-                transition: "all 0.3s ease-out",
-                transitionDelay: `${i * 0.02}s`,
-                transform: isVisible ? "scale(1)" : "scale(0)",
-                transformOrigin: `${cx}px ${cy}px`,
-                animation: isVisible ? `triangleShoot 0.4s ${i * 0.02}s ease-out forwards, splatFade 9s 2s ease-in forwards` : "none",
-              }}
-            />
-          );
-        })} */}
-
-        {/* Streak lines flying outward */}
-        {/* {streaks.map((s, i) => {
-          const x1 = Math.cos(s.angle) * s.dist * scale;
-          const y1 = Math.sin(s.angle) * s.dist * scale;
-          const x2 = Math.cos(s.angle) * (s.dist + s.len) * scale;
-          const y2 = Math.sin(s.angle) * (s.dist + s.len) * scale;
-          return (
-            <line
-              key={`streak-${i}`}
-              x1={x1} y1={y1} x2={x2} y2={y2}
-              stroke={color}
-              strokeWidth={s.w * scale}
-              strokeLinecap="round"
-              opacity={isVisible ? 0.7 : 0}
-              style={{
-                transition: "opacity 0.3s ease-out",
-                transitionDelay: `${i * 0.03}s`,
-                animation: isVisible ? `splatFade 9s 2s ease-in forwards` : "none",
-              }}
-            />
-          );
-        })} */}
-
         {/* Satellite droplets */}
         {droplets.map((d, i) => {
           const cx = Math.cos(d.angle) * d.dist * scale;
@@ -197,13 +134,13 @@ function BalloonSplat({ x, y, id, onDone }) {
               cx={cx} cy={cy}
               r={d.r * scale}
               fill={color}
-              opacity={isVisible ? 0.9 : 0}
+              opacity={splatVisible ? 0.9 : 0}
               style={{
                 transition: "all 0.4s cubic-bezier(0.34,1.56,0.64,1)",
                 transitionDelay: `${0.04 + i * 0.03}s`,
-                transform: isVisible ? "scale(1)" : "scale(0)",
+                transform: splatVisible ? "scale(1)" : "scale(0)",
                 transformOrigin: `${cx}px ${cy}px`,
-                animation: isVisible ? `splatFade 9s 2s ease-in forwards` : "none",
+                animation: splatVisible ? `splatFade 9s 2s ease-in forwards` : "none",
               }}
             />
           );
@@ -213,10 +150,10 @@ function BalloonSplat({ x, y, id, onDone }) {
         <g
           style={{
             transition: "all 0.3s cubic-bezier(0.22,1,0.36,1)",
-            transform: isVisible ? `scale(${scale})` : "scale(0)",
+            transform: splatVisible ? `scale(${scale})` : "scale(0)",
             transformOrigin: "0 0",
-            opacity: isVisible ? 1 : 0,
-            animation: isVisible ? `splatFade 9s 2s ease-in forwards` : "none",
+            opacity: splatVisible ? 1 : 0,
+            animation: splatVisible ? `splatFade 9s 2s ease-in forwards` : "none",
           }}
         >
           <path
@@ -224,15 +161,11 @@ function BalloonSplat({ x, y, id, onDone }) {
             fill={`url(#g-${uid})`}
             filter={`url(#f-${uid})`}
           />
-          
-          {/* Inner texture ring */}
           <path
             d={generateSplatPath(12, 28)}
             fill="white"
             opacity="0.2"
           />
-          
-          {/* Highlight */}
           <ellipse
             cx={-15}
             cy={-15}
@@ -243,23 +176,6 @@ function BalloonSplat({ x, y, id, onDone }) {
             transform="rotate(-30)"
           />
         </g>
-
-        {/* Drips */}
-        {/* {drips.map((d, i) => (
-          <path
-            key={`drip-${i}`}
-            d={generateDrip(d.sx * scale, d.sy * scale, d.len * scale, d.w * scale)}
-            fill={color}
-            opacity={isVisible ? 0.85 : 0}
-            style={{
-              transition: "all 0.7s cubic-bezier(0.4,0,0.6,1)",
-              transitionDelay: `${0.12 + i * 0.07}s`,
-              transform: isVisible ? "scaleY(1)" : "scaleY(0)",
-              transformOrigin: `${d.sx * scale}px ${d.sy * scale}px`,
-              animation: isVisible ? `splatFade 9s 2s ease-in forwards` : "none",
-            }}
-          />
-        ))} */}
       </svg>
     </div>
   );
@@ -303,17 +219,52 @@ function BackgroundBlobs() {
 }
 
 export default function App() {
-  const [splats, setSplats] = useState([]);
+  const [balloons, setBalloons] = useState([]);
   const counter = useRef(0);
 
-  const handleClick = (e) => {
+  const launchBalloon = useCallback(() => {
     const id = counter.current++;
-    setSplats((prev) => [...prev, { id, x: e.clientX, y: e.clientY }]);
-  };
+    const startX = randomBetween(60, window.innerWidth - 60);
+    const targetX = randomBetween(80, window.innerWidth - 80);
+    const targetY = randomBetween(80, window.innerHeight - 80);
+    const color = randomColor();
+    setBalloons((prev) => [...prev, { id, startX, targetX, targetY, color }]);
+  }, []);
 
-  const removeSplat = (id) => {
-    setSplats((prev) => prev.filter((s) => s.id !== id));
-  };
+  // Also allow manual click
+  const handleClick = useCallback((e) => {
+    const id = counter.current++;
+    setBalloons((prev) => [
+      ...prev,
+      {
+        id,
+        startX: randomBetween(60, window.innerWidth - 60),
+        targetX: e.clientX,
+        targetY: e.clientY,
+        color: randomColor(),
+      },
+    ]);
+  }, []);
+
+  const removeBalloon = useCallback((id) => {
+    setBalloons((prev) => prev.filter((b) => b.id !== id));
+  }, []);
+
+  // Auto-launch balloons on interval
+  useEffect(() => {
+    // Launch a few immediately
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => launchBalloon(), i * 400);
+    }
+    // Then keep launching
+    const interval = setInterval(() => {
+      const count = Math.floor(randomBetween(1, 3));
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => launchBalloon(), i * randomBetween(200, 600));
+      }
+    }, randomBetween(1200, 2200));
+    return () => clearInterval(interval);
+  }, [launchBalloon]);
 
   return (
     <>
@@ -333,10 +284,23 @@ export default function App() {
           100% { opacity: 0; }
         }
 
-        @keyframes triangleShoot {
-          0%   { transform: scale(0) translateX(0); }
-          50%  { transform: scale(1.3) translateX(5px); }
-          100% { transform: scale(1) translateX(0); }
+        @keyframes balloonFly {
+          0% {
+            transform: translateX(-50%) translate(0, 0) rotate(0deg);
+          }
+          20% {
+            transform: translateX(-50%) translate(calc(var(--target-x) * 0.2), calc(var(--target-y) * 0.2)) rotate(-8deg);
+          }
+          60% {
+            transform: translateX(-50%) translate(calc(var(--target-x) * 0.6), calc(var(--target-y) * 0.6)) rotate(6deg);
+          }
+          85% {
+            transform: translateX(-50%) translate(calc(var(--target-x) * 0.9), calc(var(--target-y) * 0.9)) rotate(-4deg);
+          }
+          100% {
+            transform: translateX(-50%) translate(var(--target-x), var(--target-y)) rotate(0deg);
+            opacity: 0;
+          }
         }
 
         @keyframes titleWave {
@@ -414,14 +378,14 @@ export default function App() {
             textShadow: "none",
             marginBottom: "0.5rem",
             paddingBottom: "40px",
-overflow: "visible",
+            overflow: "visible",
           }}
         >
           Happy Holi!
         </h1>
 
         {/* Subtitle */}
-        <p
+        {/* <p
           style={{
             fontSize: "clamp(1rem, 2.5vw, 1.4rem)",
             color: "rgba(255,255,255,0.75)",
@@ -437,7 +401,7 @@ overflow: "visible",
           }}
         >
           🎨 Click anywhere to splash colors! 🎨
-        </p>
+        </p> */}
 
         {/* Decorative elements around title */}
         <div style={{ position: "absolute", zIndex: 5 }}>
@@ -465,9 +429,17 @@ overflow: "visible",
           })}
         </div>
 
-        {/* Splats layer */}
-        {splats.map((s) => (
-          <BalloonSplat key={s.id} x={s.x} y={s.y} id={s.id} onDone={removeSplat} />
+        {/* Balloons layer */}
+        {balloons.map((b) => (
+          <WaterBalloon
+            key={b.id}
+            id={b.id}
+            startX={b.startX}
+            targetX={b.targetX}
+            targetY={b.targetY}
+            color={b.color}
+            onSplat={removeBalloon}
+          />
         ))}
       </div>
     </>
